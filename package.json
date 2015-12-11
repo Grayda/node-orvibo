@@ -24,5 +24,8 @@
   "bugs": {
     "url": "https://github.com/Grayda/node-orvibo/issues"
   },
-  "homepage": "https://github.com/Grayda/node-orvibo#readme"
+  "homepage": "https://github.com/Grayda/node-orvibo#readme",
+  "dependencies": {
+    "underscore.string": "^3.2.2"
+  }
 }

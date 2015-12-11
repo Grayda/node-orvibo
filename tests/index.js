@@ -1,7 +1,7 @@
 // A test file for the AllOne. Finds, subscribes and queries all devices
 // Press the button on the top of your AllOne to put it into learning mode
 
-var OrviboAllOne = require("../lib/allone.js");
+var OrviboAllOne = require("../index.js");
 var o = new OrviboAllOne();
 
 o.on("ready", function() {
