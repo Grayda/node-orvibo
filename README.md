@@ -16,6 +16,10 @@ This library supports the S10 and S20 sockets, which is sold under a variety of 
 - ON THE WAY, [available on Amazon](http://www.amazon.com/WAY%C2%AERemote-Control-Electronics-Automation-3Samsung/dp/B00S4NULPO/ref=sr_1_2?ie=UTF8&qid=1426736382&sr=8-2&keywords=bayit+smart+wi-fi+socket)
 - Orvibo on [Aliexpress](http://www.aliexpress.com/wholesale?catId=0&initiative_id=SB_20150318191819&SearchText=Orvibo+s20) and also on [Banggood](http://www.banggood.com/WiWo-S20-Wi-Fi-Smart-Remote-Control-Timing-Socket-USEU-Plug-p-953743.html)
 
+It also supports the AllOne, which is an IR / RF blaster.
+
+There is no support for the [Kepler gas detector](https://www.kickstarter.com/projects/28240313/kepler-your-best-home-gas-detector) yet, but [go-orvibo](http://github.com/Grayda/go-orvibo) can detect them. As soon as I can get my hands on a Kepler, I can add in the remaining code.
+
 Helping out
 ===========
 
