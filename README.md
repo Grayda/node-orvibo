@@ -30,6 +30,8 @@ I'd also love pull requests and forks. As I no longer use my Orvibo products wit
 Usage
 =====
 
+Install using `npm install --save node-orvibo`
+
 See `tests/index.js` for a near-complete sample. Protocol can be found here: http://pastebin.com/TSK4Lu4Q
 
 To-Do
