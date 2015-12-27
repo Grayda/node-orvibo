@@ -5,6 +5,15 @@ This package lets you control various Orvibo products from node.js. It's a rewri
 
 This library has been tested with an AllOne and two sockets. RF support should work, but is untested because I don't own any RF switches. There is no Kepler support (other than knowing when one is on the network) for the same reason.
 
+Features
+========
+
+ - Learn and play back IR codes using the AllOne IR blaster
+ - Use the AllOne to emit RF to control RF light switches
+ - Turn WiFi sockets on and off
+ - Set up Orvibo devices without needing a smartphone
+
+
 Supported products
 ==================
 
@@ -23,7 +32,7 @@ There is no support for the [Kepler gas detector](https://www.kickstarter.com/pr
 Helping out
 ===========
 
-I'm looking for hardware donations. If you own an RF switch or a Kepler and are willing to donate them, please contact me using the address on my GitHub profile. Likewise, if you'd like to donate money to cover hardware and programming costs, I accept PayPal. Just head to http://paypal.me/davidgrayPhotography
+I'm looking for hardware donations. If you own an RF switch or a Kepler and are willing to donate them, please contact me using the address on my GitHub profile. Likewise, if you'd like to donate money to cover hardware and programming costs, I accept PayPal and Bitcoin. Just head to http://paypal.me/davidgrayPhotography for PayPal, or send me some delicious digital currency with Bitcoin: 34agreMVU8QeHu4cLLPkyw5EYdSKp6NqTV
 
 I'd also love pull requests and forks. As I no longer use my Orvibo products with node.js, my time spent maintaining this package will be low, so by all means raise issues, pull, fork and do whatever you can to help out :)
 
@@ -32,13 +41,23 @@ Usage
 
 Install using `npm install --save node-orvibo`
 
-See `examples/basic/index.js` for a near-complete sample. Protocol can be found here: http://pastebin.com/TSK4Lu4Q
+See `examples/basic/index.js` for a near-complete sample. Check PROTOCOL.md for protocol, but also check out this Pastebin for a more complete documentation: http://pastebin.com/TSK4Lu4Q
+
+What's New?
+===========
+
+ - 27/12/2015
+   - You can now set up a device without the WiWo app.
+   - PROTOCOL.md updated. Still needs work, but is growing every Day
+   - New examples added, and "basic" example updated to emit IR AND RF
+   - Various bugfixes, plus new events added
 
 To-Do
 =====
 
 - [ ] Add Kepler support
+- [ ] Go through and clean up / standardize events being emitted
 - [ ] Test RF stuff
-- [ ] Create proper protocol document, including RF documentation
+- [ ] Finish off protocol documentation
 - [ ] Include emulator
 - [x] Rewrite this whole thing, now that I've learned so much more about node

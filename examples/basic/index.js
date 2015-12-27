@@ -2,15 +2,15 @@ var Orvibo = require("../../index.js")
 var o = new Orvibo()
 
 // Four timers for repeating messages.
-var time1 = []
-var time2 = []
-var time3 = []
-var time4 = []
+var time1 = [] // Initial searching for devices
+var time2 = [] // Subscribing to a device
+var time3 = [] // Querying a device
+var time4 = [] // Toggling of a socket
 
 // A device has been added
 o.on("deviceadded", function(device) {
   // Show all the devices we now have
-  console.dir(o.devices)
+  console.log("A device has been added:", device.type)
   // Clear our first timer, as we've found at least one socket
   clearInterval(time1)
   // Ask around again, just in case we missed something
@@ -26,6 +26,7 @@ o.on("deviceadded", function(device) {
 // We've asked to subscribe, and now we've had a response. Next, we query
 // the device for its name and such
 o.on("subscribed", function(device) {
+  console.log("Subscription to %s successful!", device.macAddress)
   // Stop the second subscribe timer for this device
   clearInterval(time2[device.macAddress])
 
@@ -37,6 +38,7 @@ o.on("subscribed", function(device) {
 
 // Our socket has responded to our query request
 o.on("queried", function(device) {
+  console.log("A device has been queried. Name (if set): %s", device.name)
   // Stop the timer for this device
   clearInterval(time3[device.macAddress])
 
@@ -59,12 +61,13 @@ o.on("ircode", function(device, ir) {
 
 // We've set the state of our socket.
 o.on("setstate", function(state) {
-  console.log("State set to", state)
+  console.log("State of %s set to", device, state)
 })
 
 // The AllOne has a button on top of it. A short press will
 // generate this event. Useful for things like a "TV on & dim the lights" thing
 o.on("buttonpress", function(device) {
+  console.log("The button on %s was pressed", device.name)
   // In this case, after 2 seconds, emit some RF to turn a lightswitch on
   setTimeout(function() {
   o.emitRF({device: device, state: true, rfid: "22a3d4"})

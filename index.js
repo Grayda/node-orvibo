@@ -9,6 +9,8 @@ var _ = require("lodash");
 var validator = require("validator")
   // jonah takes care of hex -> ASCII and ASCII -> hex stuff
 var hex = require("jonah")
+  // Used when setting up a new socket. We need to sleep to let our packet send.
+var sleep = require('sleep');
 
 // For inheriting the EventEmitter class so we can emit events
 var util = require("util")
@@ -18,6 +20,8 @@ util.inherits(Orvibo, EventEmitter)
 // The UDP stuff
 var dgram = require('dgram');
 var socket = dgram.createSocket('udp4') // For sending data
+var kepler = dgram.createSocket('udp4') // For sending data to the Kepler
+var setup = dgram.createSocket('udp4') // For sending data to the Kepler
 
 function Orvibo() {
   EventEmitter.call(this);
@@ -36,6 +40,20 @@ function Orvibo() {
         // Pass the message off to our handleMessage function
       this.handleMessage(message, address)
     }.bind(this))
+
+    kepler.on("message", function(message, address) {
+      // If it's from us, we're not interested
+      if (ip.address() == address.address) {
+        return
+      }
+
+      // Take our message, turn it into a hex string
+      message = new Buffer(message).toString('hex')
+      debug("Message received for Kepler", message, address)
+        // Pass the message off to our handleMessage function
+      this.handleMessage(message, address)
+    }.bind(this))
+
   }.bind(this))
 }
 
@@ -48,6 +66,22 @@ Orvibo.prototype.listen = function(callback) {
       socket.setBroadcast(true)
       debug("Broadcast set to true")
       this.emit("ready", options.port)
+      cb(callback)
+    })
+
+    kepler.bind(options.keplerport, function() {
+      debug("Socket bound to port", options.keplerport)
+      kepler.setBroadcast(true)
+      debug("Broadcast set to true")
+      this.emit("keplerready", options.keplerport)
+      cb(callback)
+    })
+
+    setup.bind(options.setupport, function() {
+      debug("Socket bound to port", options.setupport)
+      setup.setBroadcast(true)
+      debug("Broadcast set to true")
+      this.emit("keplerready", options.setupport)
       cb(callback)
     })
   } catch (ex) {
@@ -79,7 +113,7 @@ Orvibo.prototype.discover = function(device, callback) {
   })
 
   debug("Discovery packet sent")
-  // Tell any listeners that we've sent a discovery message
+    // Tell any listeners that we've sent a discovery message
   this.emit("discoverysent", args.device)
   this.sendMessage(message, options.broadcastIP)
 
@@ -101,9 +135,9 @@ Orvibo.prototype.subscribe = function(device, callback) {
     }.bind(this))
   } else {
     debug("Subscribing to", device.macAddress)
-    // prepareMessage is used a little differently here.
-    // anything within "data" is flattened into a single string (so order matters!)
-    // "macReversed" could be called "jslkdf" -- it doesn't matter in the end
+      // prepareMessage is used a little differently here.
+      // anything within "data" is flattened into a single string (so order matters!)
+      // "macReversed" could be called "jslkdf" -- it doesn't matter in the end
     message = this.prepareMessage({
       commandID: "636c",
       macAddress: args.device.macAddress,
@@ -168,7 +202,9 @@ Orvibo.prototype.setState = function(device, state, callback) {
     callback: Args.FUNCTION | Args.Optional
   }], arguments);
 
-  if (args.device.type != "Socket") { return }
+  if (args.device.type != "Socket") {
+    return
+  }
 
   // Sets our device's state property to our new value.
   args.device.state = args.state
@@ -189,7 +225,7 @@ Orvibo.prototype.setState = function(device, state, callback) {
   // This is a misnomer. addDevice also updates devices if they exist
   this.addDevice(args.device)
 
-  this.emit("setstate", args.state)
+  this.emit("setstate", args.device, args.state)
   this.sendMessage(message, args.device.ip)
 }
 
@@ -204,7 +240,9 @@ Orvibo.prototype.emitIR = function(device, ir, callback) {
     callback: Args.FUNCTION | Args.Optional
   }], arguments);
 
-  if(args.device.type != "AllOne") { return }
+  if (args.device.type != "AllOne") {
+    return
+  }
 
   message = this.prepareMessage({
     commandID: "6963",
@@ -223,6 +261,7 @@ Orvibo.prototype.emitIR = function(device, ir, callback) {
       ir: args.ir
     }
   })
+  this.emit("iremitted", args.device, args.ir)
   this.sendMessage(message, args.device.ip)
 }
 
@@ -263,8 +302,8 @@ Orvibo.prototype.emitRF = function(device, sessionID, state, rfkey, rfid, callba
       rfid: args.rfid
     }
   })
-  console.dir(message)
   this.sendMessage(message, args.device.ip)
+  this.emit("rfemitted", args.device, args.sessionID, args.state, args.rfkey, args.rfid)
 }
 
 // enterLearningMode does what it says on the tin. It makes the AllOne's ring turn red and waits for an IR signal
@@ -301,6 +340,199 @@ Orvibo.prototype.enterLearningMode = function(device) {
     this.sendMessage(message, args.device.ip)
     this.emit("learningmode", device)
   }
+}
+
+// This sets up a device while it's in AP mode. This is FAR more
+// reliable than setting up the other way (which worked maybe once out of 30 tries.
+// Props to Andrius Štikonas (https://stikonas.eu/wordpress/2015/02/24/reverse-engineering-orvibo-s20-socket/)
+// for reading up on the HF WiFi chip and getting this working.
+Orvibo.prototype.setupDeviceAP = function(type, encryption, ssid, password) {
+  var args = Args([{
+    type: Args.STRING | Args.Required,
+    _check: /(OPEN|SHARED|WPAPSK|WPA2PSK)/
+  }, {
+    encryption: Args.STRING | Args.Required,
+    _check: /(NONE|WEP-H|WEP-A|TKIP|AES)/
+  }, {
+    ssid: Args.STRING | Args.Required,
+    _check: function(ssid) {
+      return ssid.length <= 32
+    }
+  }, {
+    password: Args.STRING | Args.Optional,
+    _default: "",
+    _check: function(password) {
+      return password.length <= 64
+    }
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
+
+  setup.on("message", function(message, address) {
+    // If it's from us, we're not interested
+    if (ip.address() == address.address) {
+      return
+    }
+
+    // Take our message, turn it into a hex string
+    message = new Buffer(message).toString('hex')
+    debug("Message received for socket setup", message, address)
+
+    if (message.indexOf("2b6f6b") > -1) {
+      debug("Got +ok from device")
+      options.setupStep++
+        switch (options.setupStep) {
+          case 1:
+            debug("First +ok. Sending WiFi details")
+            this.sendMessage({
+              message: new Buffer("AT+WSKEY=" + args.type + "," + args.encryption + "," + args.password + "\r").toString('hex'),
+              address: options.broadcastIP,
+              port: options.setupport,
+              sock: setup
+            })
+            break
+          case 2:
+            debug("Second +ok. Switching to station mode")
+            this.sendMessage({
+              message: new Buffer("AT+WMODE=STA\r").toString('hex'),
+              address: options.broadcastIP,
+              port: options.setupport,
+              sock: setup
+            })
+            break
+          case 3:
+            debug("Third +ok. Rebooting")
+            this.sendMessage({
+              message: new Buffer("AT+Z\r").toString('hex'),
+              address: options.broadcastIP,
+              port: options.setupport,
+              sock: setup
+            })
+            this.emit("setupcomplete")
+        }
+    } else if (message.indexOf("4143434632") > -1) {
+      debug("Device now in setup mode. Sending SSID")
+      this.sendMessage({
+        message: new Buffer("+ok").toString('hex'),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+      this.sendMessage({
+        message: new Buffer("AT+WSSSID=" + args.ssid + "\r").toString('hex'),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+
+    } else if (message.indexOf("2b455252") > -1) {
+      debug("ERROR!!")
+
+    }
+  }.bind(this))
+
+  debug("Putting device in serial mode")
+  options.setupStep = 0
+  this.sendMessage({
+    message: new Buffer("HF-A11ASSISTHREAD").toString('hex'),
+    address: options.broadcastIP,
+    port: options.setupport,
+    sock: setup
+  })
+
+}
+
+// More info here: http://blog.slange.co.uk/orvibo-s20-wifi-power-socket/
+// The WiFi chip inside can "sniff" network traffic, and it does so to look for
+// a specific pattern. Basically you spell out the password with the length of your UDP
+// packet. So to send a "p", you'd broadcast a packet of length 230 (so that's 112 is ASCII,
+// plus 76 for some reason, plus 42 (UDP header) and that packet contains nothing but 0x05's)
+// After repeating that for a minute, the device should be (almost) ready to use on the network.
+Orvibo.prototype.setupDevice = function(password) {
+  var sleepTime = 15000
+  debug("Setting up device with password: %s", password[0] + _.repeat("*", password.length - 2) + password[password.length - 1])
+
+  debug("Sending of initial header complete")
+
+  // First part of the pattern is to send 0x05 200 times with a TOTAL length of 118
+  for (var i = 0; i < 400; i++) {
+    this.sendMessage({
+      message: _.repeat("05", 76),
+      address: options.broadcastIP,
+      port: options.setupport,
+      sock: setup
+    })
+    sleep.usleep(sleepTime)
+  }
+  repeat = setInterval(function() {
+
+    for (var i = 0; i < 6; i++) {
+      this.sendMessage({
+        message: _.repeat("05", 89),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+      sleep.usleep(sleepTime)
+    }
+
+    debug("Sending of header complete")
+
+    for (var i = 0; i <= password.length - 1; i++) {
+      debug("Sending %d (%s)", password.charCodeAt(i), password[i])
+      this.sendMessage({
+        message: _.repeat("05", password.charCodeAt(i) + 76),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+      sleep.usleep(sleepTime)
+      this.sendMessage({
+        message: _.repeat("05", password.charCodeAt(i) + 76),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+      sleep.usleep(sleepTime)
+    }
+
+    debug("Sending of password complete")
+
+    for (var i = 0; i < 6; i++) {
+      this.sendMessage({
+        message: _.repeat("05", 86),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+      sleep.usleep(sleepTime)
+    }
+
+    debug("Sending of footer complete")
+
+    for (var i = 0; i < 6; i++) {
+      this.sendMessage({
+        message: _.repeat("05", 332 + password.length),
+        address: options.broadcastIP,
+        port: options.setupport,
+        sock: setup
+      })
+      sleep.usleep(sleepTime)
+    }
+
+    debug("Sending of checksum complete. Now repeating..")
+
+
+  }.bind(this), 100)
+
+  // Cancel our timer after 60 seconds
+  setTimeout(function() {
+    this.emit("setuphalted")
+    debug("60 seconds has elapsed. Timer stopped.")
+    clearInterval(repeat)
+  }.bind(this), 60000)
+
+
 }
 
 // This function takes a bunch of info and makes it into a message, ready to send via sendMessage().
@@ -346,9 +578,9 @@ Orvibo.prototype.prepareMessage = function(commandID, macAddress, macPadding, da
 
 // Here's where the fun happens. This takes a message from our socket, parses it and
 // does stuff with that message. This can get fairly long, so don't get lost!
-Orvibo.prototype.handleMessage = function(message, address) {
+Orvibo.prototype.handleMessage = function(message, address, sock) {
   debug("Parsing incoming message. Command ID is:", message.substr(8, 4))
-  // Get our commandID
+    // Get our commandID
   switch (message.substr(8, 4)) {
     // 7161 = A device has responded to our discovery call!
     case "7161":
@@ -373,7 +605,7 @@ Orvibo.prototype.handleMessage = function(message, address) {
             this.emit("socketfound", device)
             this.addDevice(device)
             break
-          // IRD = AllOne
+            // IRD = AllOne
           case "495244":
             var device = {
               macAddress: message.substr(14, 12),
@@ -385,8 +617,8 @@ Orvibo.prototype.handleMessage = function(message, address) {
             this.emit("allonefound", device)
             this.addDevice(device)
             break
-          // RFG = Kepler (I think)
-          case "524647":
+            // RFG = Kepler (I think)
+          case "4B4550":
             var device = {
               macAddress: message.substr(14, 12),
               macPadding: message.substr(26, 12),
@@ -397,7 +629,7 @@ Orvibo.prototype.handleMessage = function(message, address) {
             this.emit("keplerfound", device)
             this.addDevice(device)
             break
-          // We got nothing. Let 'em know.
+            // We got nothing. Let 'em know.
           default:
             this.emit("unknownfound", message.substr(62, 6))
             debug("Found something else:", message.substr(62, 6))
@@ -406,13 +638,13 @@ Orvibo.prototype.handleMessage = function(message, address) {
 
       }
       break
-    // A device has confirmed our subscription
+      // A device has confirmed our subscription
     case "636c":
       device = this.getDevice(message.substr(12, 12))
       debug("Subscription confirmation returned from", device.macAddress)
       this.emit("subscribed", device)
       break
-    // We've queried a device and got a response
+      // We've queried a device and got a response
     case "7274":
       // This is our table number which determines what data we got back
       switch (message.substr(46, 2)) {
@@ -428,42 +660,42 @@ Orvibo.prototype.handleMessage = function(message, address) {
           this.emit("queried", device)
           this.addDevice(device)
           break
-        // Table 03 is timing data (e.g. what schedules are set up etc.)
+          // Table 03 is timing data (e.g. what schedules are set up etc.)
         case "03":
           debug("Timing data received. NOT YET IMPLEMENTED")
           break
       }
       break
-    // Someone has pressed a button on the socket, changing it's state
+      // Someone has pressed a button on the socket, changing it's state
     case "7366":
       device = this.getDevice(message.substr(12, 12))
-      // Extract our state (which is the last byte) and booleanify it
+        // Extract our state (which is the last byte) and booleanify it
       device.state = validator.toBoolean(message.substr(message.length - 1, 1))
       debug("State change confirmation received. New state is", device.state)
-      // Update our device list
+        // Update our device list
       this.addDevice(device)
       this.emit("externalstatechanged", device, device.state)
       break
-    // We've asked to change the state, and the socket has done so.
+      // We've asked to change the state, and the socket has done so.
     case "6463":
       device = this.getDevice(message.substr(12, 12))
       debug("State change confirmation received for", device.macAddress)
       break
-    // The top of the AllOne has a button that is a wakeup / factory reset button.
-    // As long as you press (and not hold) the button, you get this message back
+      // The top of the AllOne has a button that is a wakeup / factory reset button.
+      // As long as you press (and not hold) the button, you get this message back
     case "6469":
       device = this.getDevice(message.substr(12, 12))
       debug("Reset button pressed on AllOne", device.macAddress)
       this.emit("buttonpress", device)
       break
-    // We've entered learning mode and fed the AllOne some juicy, juicy IR data
-    // This message contains the IR code it learned
+      // We've entered learning mode and fed the AllOne some juicy, juicy IR data
+      // This message contains the IR code it learned
     case "6c73":
       device = this.getDevice(message.substr(12, 12))
       debug("IR received. Length was", message.substr(52).length)
       this.emit("ircode", device, message.substr(52))
       break
-    // We've asked to emit some IR, and it's done it.
+      // We've asked to emit some IR, and it's done it.
     case "6963":
       device = this.getDevice(message.substr(12, 12))
       this.emit("irsent", device)
@@ -473,19 +705,26 @@ Orvibo.prototype.handleMessage = function(message, address) {
 }
 
 // The heart of our code. This sends the message via UDP. Pass it a hex string and an address
-Orvibo.prototype.sendMessage = function(message, address, callback) {
+Orvibo.prototype.sendMessage = function(message, address, port, sock, callback) {
+  var args = Args([{
+    message: Args.STRING | Args.Required
+  }, {
+    address: Args.STRING | Args.Required
+  }, {
+    sock: Args.OBJECT | Args.Optional,
+    _default: socket
+  }, {
+    port: Args.INT | Args.Optional,
+    _default: options.port
+  }], arguments);
 
-  message = new Buffer(message.toLowerCase(), "hex"); // We need to send as a buffer. this line takes our message and makes it into one.
-  process.nextTick(function() { // Next time we're processing stuff. To keep our app from running away from us, I suppose
-    process.nextTick(function() { // Next time we're processing stuff. To keep our app from running away from us, I suppose
-      socket.send(message, 0, message.length, options.port, address, function(err, bytes) { // Send the message. Parameter 2 is offset, so it's 0.
-        if (err) throw err; // Error? CRASH AND BURN BB!
-        debug("Message sent to", address, "with length", message.length)
-        this.emit("messageSent", message, address, socket.address().address); // Tell the world we've sent a packet. Include message, who it's being sent to, plus the address it's being sent from
-      }.bind(this)); // Again, we do .bind(this) so calling this.emit(); comes from OrviboAllOne, and not from scktClient
-      cb(callback)
-    }.bind(this));
-  }.bind(this));
+  args.message = new Buffer(args.message.toLowerCase(), "hex"); // We need to send as a buffer. this line takes our message and makes it into one.
+  args.sock.send(args.message, 0, args.message.length, args.port, args.address, function(err, bytes) { // Send the message. Parameter 2 is offset, so it's 0.
+    if (err) throw err; // Error? CRASH AND BURN BB!
+    debug("Message sent to %s:%s with length %d", args.address, args.port, args.message.length)
+    this.emit("messageSent", args.message, args.address, args.sock.address().address, args.sock); // Tell the world we've sent a packet. Include message, who it's being sent to, plus the address it's being sent from
+  }.bind(this)); // Again, we do .bind(this) so calling this.emit(); comes from OrviboAllOne, and not from scktClient
+  cb(callback)
 }
 
 // Adds (or updates) a device in our list.
@@ -508,12 +747,12 @@ Orvibo.prototype.addDevice = function(device) {
 
     // Get our device from the list
     dev = _.where(this.devices, {
-      macAddress: args.device.macAddress
-    })
-    // Override the device in the list with the one we passed it
+        macAddress: args.device.macAddress
+      })
+      // Override the device in the list with the one we passed it
     dev = args.device
     this.emit("deviceupdated", args.device)
-  // If the device isn't in the list
+      // If the device isn't in the list
   } else {
     // Push it onto our array of devices
     this.devices.push(args.device)
@@ -547,9 +786,12 @@ Orvibo.prototype.devices = []
 // Some generic options
 var options = {
   port: 10000,
+  keplerport: 9999,
+  setupport: 48899, // What port we'll use to set up new sockets
   broadcastIP: "255.255.255.255",
   macPadding: "202020202020",
-  magicWord: "6864"
+  magicWord: "6864",
+  setupStep: 0 // Used to work out what command to send next when setting up a new socket
 }
 
 
