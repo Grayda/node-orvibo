@@ -11,6 +11,8 @@ var validator = require("validator")
 var hex = require("jonah")
   // Used when setting up a new socket. We need to sleep to let our packet send.
 var sleep = require('sleep');
+// For parsing timing related stuff
+var moment = require("moment")
 
 // For inheriting the EventEmitter class so we can emit events
 var util = require("util")
@@ -37,8 +39,9 @@ function Orvibo() {
       // Take our message, turn it into a hex string
       message = new Buffer(message).toString('hex')
       debug("Message received", message, address)
-        // Pass the message off to our handleMessage function
+      this.emit("message", message, address) // Pass the message off to our handleMessage function
       this.handleMessage(message, address)
+
     }.bind(this))
 
     kepler.on("message", function(message, address) {
@@ -51,6 +54,8 @@ function Orvibo() {
       message = new Buffer(message).toString('hex')
       debug("Message received for Kepler", message, address)
         // Pass the message off to our handleMessage function
+      this.emit("keplermessage", message, address) // Pass the message off to our handleMessage function
+      this.emit("message", message, address) // Pass the message off to our handleMessage function
       this.handleMessage(message, address)
     }.bind(this))
 
@@ -65,25 +70,23 @@ Orvibo.prototype.listen = function(callback) {
       debug("Socket bound to port", options.port)
       socket.setBroadcast(true)
       debug("Broadcast set to true")
-      this.emit("ready", options.port)
-      cb(callback)
     })
 
     kepler.bind(options.keplerport, function() {
       debug("Socket bound to port", options.keplerport)
       kepler.setBroadcast(true)
       debug("Broadcast set to true")
-      this.emit("keplerready", options.keplerport)
-      cb(callback)
     })
 
     setup.bind(options.setupport, function() {
       debug("Socket bound to port", options.setupport)
       setup.setBroadcast(true)
       debug("Broadcast set to true")
-      this.emit("keplerready", options.setupport)
-      cb(callback)
     })
+    this.emit("ready", options.port)
+    if (typeof callback !== "undefined") {
+      callback(options.port, options.keplerport, options.setupport)
+    }
   } catch (ex) {
     throw ex
   }
@@ -117,6 +120,9 @@ Orvibo.prototype.discover = function(device, callback) {
   this.emit("discoverysent", args.device)
   this.sendMessage(message, options.broadcastIP)
 
+  if (typeof args.callback !== "undefined") {
+    args.callback(args.device)
+  }
 }
 
 // In order to control a device, you need to subscribe to it.
@@ -146,7 +152,7 @@ Orvibo.prototype.subscribe = function(device, callback) {
         // This takes a MAC address, splits it up into chunks of 2 (so [A, C], [C, F] etc.)
         // then reverses the chunks (so it becomes [C, F], [A, C]), flattens the array,
         // then finally joins it together as one long string. Phew!
-        macReversed: _.flatten(_.chunk(args.device.macAddress, 2).reverse()).join(""),
+        macReversed: this.switchEndian(args.device.macAddress),
         macPadding: args.device.macPadding
       }
     })
@@ -154,6 +160,9 @@ Orvibo.prototype.subscribe = function(device, callback) {
     this.sendMessage(message, device.ip)
   }
 
+  if (typeof args.callback !== "undefined") {
+    args.callback(args.device)
+  }
 }
 
 // Once you've subscribed to a device, you can query it for info.
@@ -189,6 +198,9 @@ Orvibo.prototype.query = function(device, table, callback) {
       }
     })
     this.sendMessage(message, args.device.ip)
+  }
+  if (typeof args.callback !== "undefined") {
+    args.callback(args.device, args.table)
   }
 }
 
@@ -227,6 +239,9 @@ Orvibo.prototype.setState = function(device, state, callback) {
 
   this.emit("setstate", args.device, args.state)
   this.sendMessage(message, args.device.ip)
+  if (typeof args.callback !== "undefined") {
+    args.callback(args.device, args.state)
+  }
 }
 
 // emitIR does what it says on the tin. Sends out an IR code from the AllOne
@@ -257,12 +272,15 @@ Orvibo.prototype.emitIR = function(device, ir, callback) {
       // HA HA, OH WOW! This is a doozy. It takes the length of our IR (divided by 2, because bytes)
       // turns it into a hex string, then uses lodash's "padLeft" to add leading zeroes if necessary. It then splits the string into chunks of two
       // (like our subscribe() function) before reversing the chunks, flattening any nested arrays, then joins the lot into a single string. UGH!
-      irlength: _.flatten(_.chunk(_.padLeft((args.ir.length / 2).toString(16).toUpperCase(), 4, "0"), 2).reverse()).join(""),
+      irlength: this.switchEndian(_.padLeft((args.ir.length / 2).toString(16).toUpperCase(), 4, "0")),
       ir: args.ir
     }
   })
   this.emit("iremitted", args.device, args.ir)
   this.sendMessage(message, args.device.ip)
+  if (typeof args.callback !== "undefined") {
+    args.callback(args.device, args.ir)
+  }
 }
 
 // Emits RF from the AllOne. Can only be used with the Orvibo RF switch, due to the way the RF stuff is done.
@@ -304,6 +322,9 @@ Orvibo.prototype.emitRF = function(device, sessionID, state, rfkey, rfid, callba
   })
   this.sendMessage(message, args.device.ip)
   this.emit("rfemitted", args.device, args.sessionID, args.state, args.rfkey, args.rfid)
+  if (typeof args.callback !== "undefined") {
+    args.callback(args.device, args.sessionID, args.state, args.rfkey, args.rfid)
+  }
 }
 
 // enterLearningMode does what it says on the tin. It makes the AllOne's ring turn red and waits for an IR signal
@@ -339,6 +360,9 @@ Orvibo.prototype.enterLearningMode = function(device) {
     })
     this.sendMessage(message, args.device.ip)
     this.emit("learningmode", device)
+    if (typeof args.callback !== "undefined") {
+      args.callback(device)
+    }
   }
 }
 
@@ -409,6 +433,9 @@ Orvibo.prototype.setupDeviceAP = function(type, encryption, ssid, password) {
               sock: setup
             })
             this.emit("setupcomplete")
+            if (typeof args.callback !== "undefined") {
+              args.callback(args.type, args.encryption, args.ssid)
+            }
         }
     } else if (message.indexOf("4143434632") > -1) {
       debug("Device now in setup mode. Sending SSID")
@@ -429,6 +456,8 @@ Orvibo.prototype.setupDeviceAP = function(type, encryption, ssid, password) {
       debug("ERROR!!")
 
     }
+    this.emit("message", message, address) // Pass the message off to our handleMessage function
+    this.emit("setupmessage", message, address) // Pass the message off to our handleMessage function
   }.bind(this))
 
   debug("Putting device in serial mode")
@@ -449,10 +478,14 @@ Orvibo.prototype.setupDeviceAP = function(type, encryption, ssid, password) {
 // plus 76 for some reason, plus 42 (UDP header) and that packet contains nothing but 0x05's)
 // After repeating that for a minute, the device should be (almost) ready to use on the network.
 Orvibo.prototype.setupDevice = function(password) {
-  var sleepTime = 15000
-  debug("Setting up device with password: %s", password[0] + _.repeat("*", password.length - 2) + password[password.length - 1])
+  var args = Args([{
+    password: Args.STRING | Args.Required
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
 
-  debug("Sending of initial header complete")
+  var sleepTime = 15000
+  debug("Setting up device with password: %s", args.password[0] + _.repeat("*", args.password.length - 2) + args.password[args.password.length - 1])
 
   // First part of the pattern is to send 0x05 200 times with a TOTAL length of 118
   for (var i = 0; i < 400; i++) {
@@ -464,6 +497,7 @@ Orvibo.prototype.setupDevice = function(password) {
     })
     sleep.usleep(sleepTime)
   }
+  debug("Sending of initial header complete")
   repeat = setInterval(function() {
 
     for (var i = 0; i < 6; i++) {
@@ -478,17 +512,17 @@ Orvibo.prototype.setupDevice = function(password) {
 
     debug("Sending of header complete")
 
-    for (var i = 0; i <= password.length - 1; i++) {
-      debug("Sending %d (%s)", password.charCodeAt(i), password[i])
+    for (var i = 0; i <= args.password.length - 1; i++) {
+      debug("Sending %d (%s)", args.password.charCodeAt(i), args.password[i])
       this.sendMessage({
-        message: _.repeat("05", password.charCodeAt(i) + 76),
+        message: _.repeat("05", args.password.charCodeAt(i) + 76),
         address: options.broadcastIP,
         port: options.setupport,
         sock: setup
       })
       sleep.usleep(sleepTime)
       this.sendMessage({
-        message: _.repeat("05", password.charCodeAt(i) + 76),
+        message: _.repeat("05", args.password.charCodeAt(i) + 76),
         address: options.broadcastIP,
         port: options.setupport,
         sock: setup
@@ -528,11 +562,190 @@ Orvibo.prototype.setupDevice = function(password) {
   // Cancel our timer after 60 seconds
   setTimeout(function() {
     this.emit("setuphalted")
+
     debug("60 seconds has elapsed. Timer stopped.")
     clearInterval(repeat)
+    if (typeof args.callback !== "undefined") {
+      args.callback()
+    }
   }.bind(this), 60000)
 
 
+}
+
+Orvibo.prototype.addTimer = function(device, date, index, state, update, repeat) {
+  var args = Args([{
+    device: Args.OBJECT | Args.Required
+  }, {
+    date: Args.DATE | Args.Required
+  }, {
+    index: Args.INT | Args.Optional,
+    _default: -1
+  }, {
+    state: Args.BOOLEAN | Args.Optional, // Should this be required instead? What about AllOne?
+    _default: false
+  }, {
+    update: Args.BOOLEAN | Args.Optional, // Should this be required instead? What about AllOne?
+    _default: false
+  }, {
+    repeat: Args.STRING | Args.Optional,
+    _default: "ff"
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
+
+  if (args.index == -1) {
+    args.index = args.device.timers.length + 1
+  }
+
+  args.date = moment(args.date)
+
+  if (args.device.type == "Socket") {
+    message = this.prepareMessage({
+      macAddress: args.device.macAddress,
+      macPadding: args.device.macPadding,
+      commandID: "746d",
+      data: {
+        blank: "00000000",
+        table: "03",
+        command: args.update ? "0001" : "0000", // 0000 = Create, 0001 = Update, 0002 = Delete
+        unknown: "1c00",
+        index: this.switchEndian(_.padLeft(args.index, 4, "0")),
+        name: "6e756c6c202020202020202020202020", // null + padding. For an AllOne, I suspect this would be the name of an IR command or something?
+        state: args.state ? "0100" : "0000",
+        year: this.switchEndian(_.padLeft(args.date.year().toString(16), 4, "0")),
+        month: this.switchEndian(_.padLeft((args.date.month() + 1).toString(16), 2, "0")),
+        day: this.switchEndian(_.padLeft((args.date.day() + 1).toString(16), 2, "0")),
+        hour: this.switchEndian(_.padLeft((args.date.hour() + 1).toString(16), 2, "0")),
+        minute: this.switchEndian(_.padLeft((args.date.minute() + 1).toString(16), 2, "0")),
+        second: this.switchEndian(_.padLeft((args.date.second() + 1).toString(16), 2, "0")),
+        repeat: args.repeat
+      }
+    })
+
+    this.sendMessage(message, args.device.ip)
+  } else {
+    debug("NOT SOCKET")
+  }
+}
+
+Orvibo.prototype.updateTimer = function(device, date, index, state, repeat) {
+  var args = Args([{
+    device: Args.OBJECT | Args.Required
+  }, {
+    date: Args.DATE | Args.Required
+  }, {
+    index: Args.INT | Args.Optional,
+    _default: -1
+  }, {
+    state: Args.BOOLEAN | Args.Optional, // Should this be required instead? What about AllOne?
+    _default: false
+  }, {
+    repeat: Args.STRING | Args.Optional,
+    _default: "ff"
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
+
+  this.addTimer({
+    device: args.device,
+    date: args.date,
+    index: args.index,
+    state: args.state,
+    update: true,
+    repeat: args.repeat,
+  })
+}
+
+
+Orvibo.prototype.deleteTimer = function(device, index) {
+  var args = Args([{
+    device: Args.OBJECT | Args.Required
+  }, {
+    index: Args.INT | Args.Optional,
+    _default: -1
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
+
+  this.prepareMessage({
+    macAddress: args.device.macAddress,
+    macPadding: args.device.macPadding,
+    commandID: "746d",
+    data: {
+      extra: "0000000003",
+      command: "0002",
+      index: this.switchEndian(_.padLeft(args.index, 4, "0")),
+    }
+  })
+  this.sendMessage(message, args.device.ip)
+}
+
+// This works.. in theory. In reality, my AllOne and sockets, with the default password of 888888, aren't
+// updated. The command simply times out. Either the command sent by WiWo / this app is incorrect
+// or there is a bug with the device firmware that means the password change packet is never processed.
+// You might want to try the command to modify tables, and simply write a new 0100 record with the new password.
+// That theory hasn't been tested yet. Perhaps in a future version :)
+Orvibo.prototype.modifyRemotePassword = function(device, oldpassword, newpassword) {
+  var args = Args([{
+    device: Args.OBJECT | Args.Required
+  }, {
+    oldpassword: Args.STRING | Args.Optional,
+    _check: function(ssid) {
+      return ssid.length <= 12
+    },
+    _default: "888888"
+  }, {
+    newpassword: Args.STRING | Args.Optional,
+    _default: "",
+    _check: function(password) {
+      return password.length <= 12
+    }
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
+
+  message = this.prepareMessage({
+    macAddress: args.device.macAddress,
+    macPadding: args.device.macPadding,
+    commandID: "6d70",
+    data: {
+      unknown: "78ed40",
+      recordlength: "0c",
+      oldpassword: hex.hex(_.padRight(args.oldpassword, 12, " ")),
+      newpassword: hex.hex(_.padRight(args.newpassword, 12, " "))
+    }
+  })
+
+  this.sendMessage(message, args.device.ip)
+}
+
+// NOTE: This doesn't work yet. When it's done, it'll let you rename
+// a device, change the icon and other stuff. You basically send it an
+// entire Table 04 and it overwrites it on the device.
+// This is in contrast to Table 03 (A.K.A the timer function)
+// where you send one timer to add, update or delete. 
+Orvibo.prototype.updateDevice = function(device, table, data) {
+  var args = Args([{
+    device: Args.OBJECT | Args.Required
+  }, {
+    table: Args.STRING | Args.Optional,
+    _default: "04"
+  }, {
+    data: Args.STRING | Args.Required,
+  }, {
+    callback: Args.FUNCTION | Args.Optional
+  }], arguments);
+
+  // 00000000 04 00018a0001004325accfdeadbeef202020202020efbeaddecfac202020202020383838383838202020202020446561646c7920426565662020202020040010000000090000000500000010272a796fd01027766963656e7465722e6f727669626f2e636f6d20202020202020202020202020202020202020202019001600002c0a80101ffffff000100000a00000
+  this.prepareMessage({
+    macAddress: args.device.macAddress,
+    macPadding: args.device.macPadding,
+    commandID: "746d",
+    blank: "00000000",
+    table: args.table, "04"
+
+  })
 }
 
 // This function takes a bunch of info and makes it into a message, ready to send via sendMessage().
@@ -568,7 +781,7 @@ Orvibo.prototype.prepareMessage = function(commandID, macAddress, macPadding, da
   // We need to define packet twice, because we can't determine the length of the string as we're building it.
   // So we build the string, count the length, then redefine the string, with the length we stored earlier.
   packet = options.magicWord + "0000" + args.commandID + args.macAddress + args.macPadding + dataStr
-  packet = options.magicWord + _.padLeft((packet.length / 2).toString(16).toUpperCase(), 4, "0") + args.commandID + args.macAddress + args.macPadding + dataStr
+  packet = options.magicWord + _.padLeft((packet.length / 2).toString(16).toLowerCase(), 4, "0") + args.commandID + args.macAddress + args.macPadding + dataStr
 
   if (typeof args.callback !== "undefined") {
     args.callback(message)
@@ -600,7 +813,8 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
               // This is our socket's initial state
               state: validator.toBoolean(message.substr(message.length - 1, 1)),
               // Give it a generic name until we discover the real name
-              name: "Socket " + message.substr(14, 12)
+              name: "Socket " + message.substr(14, 12),
+              timers: []
             }
             this.emit("socketfound", device)
             this.addDevice(device)
@@ -612,7 +826,8 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
               macPadding: message.substr(26, 12),
               type: "AllOne",
               ip: address.address,
-              name: "AllOne " + message.substr(14, 12)
+              name: "AllOne " + message.substr(14, 12),
+              timers: []
             }
             this.emit("allonefound", device)
             this.addDevice(device)
@@ -646,23 +861,70 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
       break
       // We've queried a device and got a response
     case "7274":
-      // This is our table number which determines what data we got back
+      device = this.getDevice(message.substr(12, 12))
+        // This is our table number which determines what data we got back
       switch (message.substr(46, 2)) {
         // Table 04 = General info about the device
         case "04":
-          device = this.getDevice(message.substr(12, 12))
+
           debug("Query data returned from", device.macAddress)
           device.password = hex.ascii(message.substr(116, 24)).trim()
-          device.name = hex.ascii(message.substr(140, 32)).trim() || device.name
-          device.icon = message.substr(172, 2)
+
+          if (!hex.ascii(message.substr(140, 32)).trim() == "ffffffffffffffffffffffffffffffff") {
+            device.name = hex.ascii(message.substr(140, 32)).trim() || device.name
+          }
+
+          device.icon = this.hexToInt(message.substr(172, 4))
+          device.hardwareversion = this.hexToInt(message.substr(176,8))
+          device.firmwareversion = this.hexToInt(message.substr(184,8))
+          device.cc3000firmareversion = this.hexToInt(message.substr(192,8))
+
+          device.remote = {
+            password: hex.ascii(message.substr(116, 24)).trim(),
+            serverport: this.hexToInt(message.substr(200, 4)),
+            serverip: this.hexToInt(message.substr(204, 2)) + "." + this.hexToInt(message.substr(206, 2)) + "." + this.hexToInt(message.substr(208, 2)) + "." + this.hexToInt(message.substr(210, 2)),
+            domainport: this.hexToInt(message.substr(212, 4)),
+            domainserver: hex.ascii(message.substr(216,80)).toString().trim()
+          }
+
+          device.dhcpmode = validator.toBoolean(message.substr(321,1))
+          device.discoverable = validator.toBoolean(message.substr(323,1))
+          device.timezoneset = validator.toBoolean(message.substr(325,1))
+          device.timezone = this.hexToInt(message.substr(326,2))
+
+          setTimeout(function() {
+            this.emit("countdownended", device)
+          }.bind(this), this.hexToInt(message.substr(330, 4)))
             // device.hardwareversion = hex.ascii(message.substr(176,2))
             // device.softwareversion = hex.ascii(message.substr(184,2))
-          this.emit("queried", device)
+          this.emit("queried", device, message.substr(46, 2))
           this.addDevice(device)
           break
           // Table 03 is timing data (e.g. what schedules are set up etc.)
         case "03":
-          debug("Timing data received. NOT YET IMPLEMENTED")
+
+          device.timers = []
+          var arr = this.extractRecords(message.substr(56))
+          arr.forEach(function(item) {
+
+            time = {
+              id: this.hexToInt(item.substr(0, 4)),
+              state: validator.toBoolean(item.substr(37, 1)),
+              date: moment({
+                year: this.hexToInt(item.substr(40, 4)),
+                month: this.hexToInt(item.substr(44, 2)) - 1,
+                day: this.hexToInt(item.substr(46, 2)) - 1,
+                hour: this.hexToInt(item.substr(48, 2)) - 1,
+                minute: this.hexToInt(item.substr(50, 2)) - 1,
+                second: this.hexToInt(item.substr(52, 2)) - 1,
+              }),
+              repeat: this.hexToInt(item.substr(54, 2)),
+            }
+            device.timers.push(time)
+
+          }.bind(this))
+          this.emit("queried", device, message.substr(46, 2))
+          this.addDevice(device)
           break
       }
       break
@@ -700,6 +962,13 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
       device = this.getDevice(message.substr(12, 12))
       this.emit("irsent", device)
       break
+    case "746d":
+      console.dir("!!!!!!!!!!", message)
+      break
+    // We've asked to change the remote password, and we've had a message back.
+    case "6d70":
+      device = this.getDevice(message.substr(12, 12))
+      this.emit("passwordchanged", device)
   }
 
 }
@@ -724,7 +993,9 @@ Orvibo.prototype.sendMessage = function(message, address, port, sock, callback) 
     debug("Message sent to %s:%s with length %d", args.address, args.port, args.message.length)
     this.emit("messageSent", args.message, args.address, args.sock.address().address, args.sock); // Tell the world we've sent a packet. Include message, who it's being sent to, plus the address it's being sent from
   }.bind(this)); // Again, we do .bind(this) so calling this.emit(); comes from OrviboAllOne, and not from scktClient
-  cb(callback)
+  if (typeof callback !== "undefined") {
+    args.callback(message, address, port)
+  }
 }
 
 // Adds (or updates) a device in our list.
@@ -759,25 +1030,96 @@ Orvibo.prototype.addDevice = function(device) {
     this.emit("deviceadded", args.device)
   }
 
+  if (typeof callback !== "undefined") {
+    args.callback(args.device)
+  }
+
+}
+
+// This function takes some data (e.g. timing data obtained after querying table 03) and
+// loops through it. It takes the first `lengthcount` bytes and turns them into an integer.
+// That many bytes are substr'd from `data` and pushed to an array, and `data` is then modified
+// to remove the bytes we just extracted. The process loops again, until no data is left,
+// OR the number of bytes we're supposed to extract is greater than the length of the data remaining.
+Orvibo.prototype.extractRecords = function(data, lengthcount, littleendian) {
+  var args = Args([{
+    data: Args.STRING | Args.Required
+  }, {
+    lengthcount: Args.INT | Args.Optional,
+    _default: 2
+  }, {
+    littleendian: Args.BOOLEAN | Args.Optional,
+    _default: true
+  }], arguments);
+
+  var res = []
+  debug("Extracting records from %s", data)
+    // Only interested in looping while we have data
+  while (args.data != "") {
+    debug("Data left: %s", data)
+    if (args.littleendian) {
+      num = parseInt(_.flatten(_.chunk(args.data.substr(0, args.lengthcount * 2), 2).reverse()).join(""), 16) * 2
+    } else {
+      num = parseInt(args.data.substr(0, args.lengthcount * 2), 16) * 2
+    }
+    // Get the first two bytes and make it into a number. Spin it all around because these numbers are little endian
+
+    // If the number of bytes to get (factoring in 2 bytes for the length) is less than our remaining data,
+    if (num + args.lengthcount * 2 <= args.data.length) {
+      debug("Pushing %s to the array", args.data.substr(args.lengthcount * 2, num))
+        // Shove it onto our array
+      res.push(args.data.substr(args.lengthcount * 2, num))
+        // And reset `data` to be the data, less our already-extracted record
+      args.data = args.data.substr(num + args.lengthcount * 2)
+    } else {
+      // If we've got more bytes to grab than there is available, stop
+      args.data = ""
+    }
+  }
+  // Return what we've got.
+  debug("Extracted %d records", res.length)
+  return res
+}
+
+Orvibo.prototype.switchEndian = function(data) {
+  var args = Args([{
+    data: Args.STRING | Args.Required
+  }], arguments);
+
+  return _.flatten(_.chunk(args.data, 2).reverse()).join("")
+}
+
+Orvibo.prototype.hexToInt = function(data, switchendian) {
+  var args = Args([{
+    data: Args.STRING | Args.Required
+  }, {
+    switchendian: Args.BOOLEAN | Args.Optional,
+    _default: true
+  }], arguments);
+
+  if (args.switchendian) {
+    args.data = this.switchEndian({
+      data: args.data
+    })
+  }
+
+  return parseInt(args.data, 16)
 }
 
 // Returns a device, given a MAC address
-Orvibo.prototype.getDevice = function(macAddress) {
+Orvibo.prototype.getDevice = function(macAddress, callback) {
   var args = Args([{
     macAddress: Args.STRING | Args.Required
   }], arguments);
 
-  return _.where(this.devices, {
+  var device = _.where(this.devices, {
     macAddress: args.macAddress
   })[0]
-}
 
-// Shorthand way of checking if our callback exists, then running it
-// TODO: Get rid of this, in favour of per-function callbacks with args-js
-function cb(callback) {
   if (typeof callback !== "undefined") {
-    callback()
+    args.callback(device)
   }
+  return device
 }
 
 // Prepare our devices array for filling

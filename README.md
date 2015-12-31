@@ -51,13 +51,25 @@ What's New?
    - PROTOCOL.md updated. Still needs work, but is growing every Day
    - New examples added, and "basic" example updated to emit IR AND RF
    - Various bugfixes, plus new events added
+ - 31/12/2015
+   - Callbacks now implemented code-wide, though events are the best way to be notified
+   - Device names that are 16 bytes of "FF" are no longer considered valid names
+   - Basic timer support added. Querying a device now returns all the timers for a device, as a moment.js object for manipulation. You can also set timers, but only sockets have been implemented so far
+   - Countdown timer (read only) also implemented. When queried, a countdown timer is set using setTimeout() and an event emitted.
+
 
 To-Do
 =====
 
+- [ ] Add timer support for the AllOne
+- [ ] Be able to set countdown timers instead of just reading them.
 - [ ] Add Kepler support
 - [ ] Go through and clean up / standardize events being emitted
 - [ ] Test RF stuff
 - [ ] Finish off protocol documentation
-- [ ] Include emulator
-- [x] Rewrite this whole thing, now that I've learned so much more about node
+- [ ] Include emulator. Use the emulator from ninja-allone if you're desperate.
+- [ ] Implement these functions:
+  - [ ] Rename device
+  - [ ] Set timezone
+  - [ ] Set time ("time since manufacture" field is the key)
+- [ ] Look in to remote login / TCP connections
