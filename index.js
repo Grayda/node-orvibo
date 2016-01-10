@@ -743,8 +743,7 @@ Orvibo.prototype.updateDevice = function(device, table, data) {
     macPadding: args.device.macPadding,
     commandID: "746d",
     blank: "00000000",
-    table: args.table, "04"
-
+    table: args.table || "04"
   })
 }
 
