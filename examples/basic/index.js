@@ -51,6 +51,10 @@ o.on("queried", function(device, table) {
   }
 })
 
+o.on("statechangeconfirmed", function(device) {
+  console.log("Socket %s confirming state change to", device.macAddress, device.state)
+})
+
 o.on("ircode", function(device, ir) { // We've learned some IR
 
   setTimeout(function() {
