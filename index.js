@@ -941,6 +941,7 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
     case "6463":
       device = this.getDevice(message.substr(12, 12))
       debug("State change confirmation received for", device.macAddress)
+      this.emit("statechangeconfirmed", device)
       break
       // The top of the AllOne has a button that is a wakeup / factory reset button.
       // As long as you press (and not hold) the button, you get this message back
