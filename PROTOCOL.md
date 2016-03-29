@@ -32,13 +32,13 @@ When an Orvibo device responds to a "search" packet, it includes a device identi
 
 * `IRD`- AllOne IR blaster
 * `SOC` - S10 / S20 WiFi sockets
-* `KEP` - Kepler gas detector
-* `RFG` - Unknown. If you know, please submit a pull request
+~~* `KEP` - Kepler gas detector~~ _Kepler possibly uses different method for ID_
+* `RFG` - Unknown. RF Gang? If you know, please submit a pull request
 
 RF switches don't have a hardware identifier (?), as they run on 433mhz and are stateless, plus communication is one-way, as mentioned below
 
 ## About RF switches
-I don't own any RF switches, so the information provided here is obtained from grabbing info from Android's LogCat, spoofing AllOnes to obtain messages and testing by Vince. I also don't have an iDevice, so info may vary between platforms
+Thanks to a generous donation, I can confirm that RF switches work with node-orvibo, so the information here is now more complete
 
 The AllOne is listed as having 433mhz support. As far as I can tell, it's one-way communication and the packets might be crafted for use with the RF switches only. That means you can't pass it an arbitrary string to ring your RF doorbell, nor can you "clone" and "replay" codes. If you're looking for wider 433mhz support, I suggest the Broadlink RM2 Pro which supports 433mhz (and possibly other frequencies too)
 
@@ -46,7 +46,7 @@ RF on the AllOne works like this (roughly):
 
  * Wire up the RF switch in your home and hold the button down to put it into learning mode (it'll beep)
  * Go into the WiWo app and create a new Switch or Light device under the AllOne
-   * This device is **NOT** stored on the AllOne!
+   * This device is **NOT** stored on the AllOne. The unique ID it generates, is (see below about learning multiple codes)
  * When the device is being created:
    * A session ID is created by the operating system. I don't think it matters what the value is, as long as it's 4 bytes
    * An "RF key" is assigned to the device. I think it's two bytes, little endian, and usually starts at around 40 (2800 in hex) but can be any number up to 65535 (though this is untested. Values up to 255 will work)
@@ -54,16 +54,18 @@ RF on the AllOne works like this (roughly):
  * Once the device is created, go in to the new Switch or Light and press a button
  * The RF switch will exit learning mode. I'm not sure what it learns, but I believe it's RF key + RF ID
 
- I think this prevents other devices from adding the same RF switch (so you can't control 1 light with 2 phones without some trickery), but a remote for these RF switches exists, so you should be able to control 1 light with a phone and any number of remotes.
+The RF switch is capable of learning multiple codes. I haven't tested how many it stores, but I've tried three so far (1x WiWo created code, and 2x node-orvibo codes), so you can safely use node-orvibo without interfering with any items you've got created in the WiWo app.
 
 ## About the Kepler
-The Kepler gas detector is / was a Kickstarter project. It was a "20%" time project by a small independent team from Orvibo. It's designed to detect "natural gas, H2, LPG, CH4, C4H10, propane, and butane, along with carbon monoxide", as well as act like a kitchen timer. It seems to communicate in much the same way as the other Orvibo products, but on port 9,999 instead. I think it also communicates via JSON, but without one to test, I can't be sure.
+The Kepler gas detector is / was a Kickstarter project. It was a "20%" time project by a small independent team from Orvibo. It's designed to detect "natural gas, H2, LPG, CH4, C4H10, propane, and butane, along with carbon monoxide", as well as act like a kitchen timer. I now have a Kepler, so I'm able to start work on this. The message format has changed significantly, and the payload (after the header, message length etc.) is now AES, 128 bit ECB encrypted JSON. The key can be quickly extracted from the Kepler app and used to decrypt and encrypt the messages. The payload also has a crc32 value, but how that value is obtained, I'm still trying to determine.
+
+Kepler support will be added soon, once I figure out the basic message structure
 
 ## Setting up a socket without the WiWo app
 There are two ways to set up a socket from scratch. The first is easier for the user, but very unreliable, the second requires that you connect to the device's access point but is fast and stable
 
 ### Method 1: UDP packet lengths
-The "High-Flying" chip used in many (if not all?) Orvibo products can apparently sniff wireless traffic for networks it's not connected to. That's why you can unbox a new device, plug it in and use the WiWo app to find and configure it, despite the device not emitting it's own access point. When sniffing, the device looks for packets sent to a broadcast address, containing nothing but `0x05`, and uses the length of the packet to determine the password. http://blog.slange.co.uk/orvibo-s20-wifi-power-socket/ has an overview and some links to data sheets, but basically, you do this:
+The "High-Flying" chip used in many Orvibo products (except the Kepler) can apparently sniff wireless traffic for networks it's not connected to. That's why you can unbox a new device, plug it in and use the WiWo app to find and configure it, despite the device not emitting it's own access point. When sniffing, the device looks for packets sent to a broadcast address, containing nothing but `0x05`, and uses the length of the packet to determine the password. http://blog.slange.co.uk/orvibo-s20-wifi-power-socket/ has an overview and some links to data sheets, but basically, you do this:
 
 - Put your device into "red" reset mode (if it's not already blinking a red light rapidly, press and hold the button on the unit until it starts blinking red rapidly. If it's blue and blinking, remove power, plug it back in and try again)
 - UDP has an overhead of 42 bytes, which you'll see mentioned below. All packets need to go to your broadcast address on port 49999
