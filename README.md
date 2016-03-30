@@ -32,7 +32,7 @@ Support for the [Kepler gas detector](https://www.kickstarter.com/projects/28240
 Helping out
 ===========
 
-I'm looking for hardware donations. If you own an RF switch or a Kepler and are willing to donate them, please contact me using the address on my GitHub profile. Likewise, if you'd like to donate money to cover hardware and programming costs, I accept PayPal and Bitcoin. Just head to http://paypal.me/davidgrayPhotography for PayPal, or send me some delicious digital currency with Bitcoin: 34agreMVU8QeHu4cLLPkyw5EYdSKp6NqTV
+I'm looking for hardware donations. I have the Kepler, AllOne, S20 and RF switches already. If you have other Orvibo hardware you'd like to donate, please contact me using the address on my GitHub profile. Likewise, if you'd like to donate money to cover hardware and programming costs, I accept PayPal and Bitcoin. Just head to http://paypal.me/davidgrayPhotography for PayPal, or send me some delicious digital currency with Bitcoin: 34agreMVU8QeHu4cLLPkyw5EYdSKp6NqTV
 
 I'd also love pull requests and forks. As I no longer use my Orvibo products with node.js, my time spent maintaining this package will be low, so by all means raise issues, pull, fork and do whatever you can to help out :)
 
@@ -46,17 +46,20 @@ See `examples/basic/index.js` for a near-complete sample. Check PROTOCOL.md for 
 What's New?
 ===========
 
- - 27/12/2015
-   - You can now set up a device without the WiWo app.
-   - PROTOCOL.md updated. Still needs work, but is growing every Day
-   - New examples added, and "basic" example updated to emit IR AND RF
-   - Various bugfixes, plus new events added
+ - 29/03/2016
+   - README and PROTOCOL updated with information about the RF switches and basic info about Kepler's message format
+   - Basic RF example added to the examples/ folder
  - 31/12/2015
    - Callbacks now implemented code-wide, though events are the best way to be notified
    - Device names that are 16 bytes of "FF" are no longer considered valid names
    - Basic timer support added. Querying a device now returns all the timers for a device, as a moment.js object for manipulation. You can also set timers, but only sockets have been implemented so far
    - Countdown timer (read only) also implemented. When queried, a countdown timer is set using setTimeout() and an event emitted.
 
+ - 27/12/2015
+   - You can now set up a device without the WiWo app.
+   - PROTOCOL.md updated. Still needs work, but is growing every Day
+   - New examples added, and "basic" example updated to emit IR AND RF
+   - Various bugfixes, plus new events added
 
 To-Do
 =====
