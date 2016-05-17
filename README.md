@@ -32,7 +32,9 @@ Support for the [Kepler gas detector](https://www.kickstarter.com/projects/28240
 Helping out
 ===========
 
-I'm looking for hardware donations. I have the Kepler, AllOne, S20 and RF switches already. If you have other Orvibo hardware you'd like to donate, please contact me using the address on my GitHub profile. Likewise, if you'd like to donate money to cover hardware and programming costs, I accept PayPal and Bitcoin. Just head to http://paypal.me/davidgrayPhotography for PayPal, or send me some delicious digital currency with Bitcoin: 34agreMVU8QeHu4cLLPkyw5EYdSKp6NqTV
+This project has come to a standstill, as I'm working on other projects at the moment. If someone would like to assist in the reverse engineering of the Kepler, and possibly the ZigBee unit, please contact me via the email address on my GH profile.
+
+I'm looking for hardware donations. I have the Kepler, AllOne, S20 and RF switches already. If you have other Orvibo hardware you'd like to donate (such as the ZigBee unit or the ZigBee IR sensor), please contact me using the address on my GitHub profile. Likewise, if you'd like to donate money to cover hardware and programming costs, I accept PayPal and Bitcoin. Just head to http://paypal.me/davidgrayPhotography for PayPal, or send me some delicious digital currency with Bitcoin: 34agreMVU8QeHu4cLLPkyw5EYdSKp6NqTV
 
 I'd also love pull requests and forks. As I no longer use my Orvibo products with node.js, my time spent maintaining this package will be low, so by all means raise issues, pull, fork and do whatever you can to help out :)
 
