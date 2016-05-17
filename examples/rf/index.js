@@ -1,3 +1,5 @@
+// If you're using this example outside of the examples folder, change this to:
+// var Orvibo = require("node-orvibo") after running npm install --save node-orvibo
 var Orvibo = require("../../index.js")
 var o = new Orvibo()
 var rfState = false
