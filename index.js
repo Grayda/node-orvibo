@@ -869,7 +869,7 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
           debug("Query data returned from", device.macAddress)
           device.password = hex.ascii(message.substr(116, 24)).trim()
 
-          if (!hex.ascii(message.substr(140, 32)).trim() == "ffffffffffffffffffffffffffffffff") {
+          if (hex.ascii(message.substr(140, 32)).trim() != "ffffffffffffffffffffffffffffffff") {
             device.name = hex.ascii(message.substr(140, 32)).trim() || device.name
           }
 
