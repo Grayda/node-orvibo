@@ -1,0 +1,20 @@
+{
+  "name": "kepler-tools",
+  "version": "1.0.0",
+  "description": "Packet decryptor for Kepler packets",
+  "main": "keplerdecode.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "kepler",
+    "decompile"
+  ],
+  "author": "David Gray",
+  "license": "ISC",
+  "dependencies": {
+    "aes-js": "^2.1.0",
+    "buffer-crc32": "^0.2.13",
+    "lodash": "^4.17.2"
+  }
+}
