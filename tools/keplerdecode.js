@@ -1,9 +1,14 @@
+// This script parses and decrypts packets from newer Orvibo products (such as the Kepler, Coco and Smartcube)
+// To use it, you'll need the decryption key from the Kepler app. To obtain it, see the README.
+// It is YOUR responsibility to obtain the key, and to keep it a secret. Do NOT distribute the key
+// with any of this software.
+
 var aesjs = require("aes-js")
 var _ = require("lodash")
 var crc32 = require('buffer-crc32')
 
 // Replace this with the key you got from the Kepler app
-var key = "key_here"
+var key = ""
 
 console.log()
 console.log("Orvibo PK Packet Decrypter")
@@ -23,6 +28,14 @@ if(process.argv.length == 4) {
   process.exit(1)
 }
 
+if(key == "") {
+  console.log("===================================================================================")
+  console.log("ERROR! No decryption key specified!")
+  console.log("Usage: " + process.argv[1] + " <key> <packet to decode>")
+  console.log("===================================================================================")
+  process.exit(1)
+
+}
 
 // Split it by 2020 (there's actually more padding, but this will do)
 parts = packet.split("2020")
@@ -96,9 +109,11 @@ console.log()
 try {
   // -1 because there's a funky byte at the end. A smiling face or something?
   obj = JSON.parse(decryptedText.substr(0, decryptedText.length - 1))
+
 } catch(ex) {
   console.log("==================================================")
   console.log("ERROR! JSON parse failed. Is this a Kepler packet?")
+  console.log("Received: " + decryptedText.substr(0, decryptedText.length - 1))
   console.log("==================================================")
   process.exit(1)
 }
