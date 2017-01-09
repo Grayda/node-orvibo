@@ -1,5 +1,6 @@
 node-orvibo
 ===========
+[![Support this project on GratiPay](https://img.shields.io/gratipay/grayda.svg)](http://gratipay.com/node-orvibo)
 
 This package lets you control various Orvibo products from node.js. It's a rewritten separation from my [ninja-allone library](http://github.com/Grayda/ninja-allone), but with added RF support.
 
