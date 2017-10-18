@@ -28,7 +28,7 @@ This library supports the S10 and S20 sockets, which is sold under a variety of 
 
 It also supports the AllOne, which is an IR / RF blaster. RF switch support is included, please see PROTOCOL.md for information
 
-Support for the [Kepler gas detector](https://www.kickstarter.com/projects/28240313/kepler-your-best-home-gas-detector) is coming soon, as I now have a Kepler
+If you're looking for a way to control B25 sockets (e.g. the newer sockets), then check out https://github.com/sandysound/orvibo-b25-server which is an open source node.js server that can control B25 sockets. You'll need to redirect DNS traffic for this to work, so see the readme for more information.
 
 If you'd like more information on the Kepler, check out the [wiki page](https://github.com/Grayda/node-orvibo/wiki/Kepler)
 
