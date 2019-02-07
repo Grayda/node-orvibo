@@ -855,6 +855,7 @@ Orvibo.prototype.handleMessage = function(message, address, sock) {
       // A device has confirmed our subscription
     case "636c":
       device = this.getDevice(message.substr(12, 12))
+      device.state = validator.toBoolean(message.substr(message.length - 1, 1))
       debug("Subscription confirmation returned from", device.macAddress)
       this.emit("subscribed", device)
       break
