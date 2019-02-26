@@ -32,7 +32,7 @@
     "jonah": "0.0.2",
     "lodash": "^3.10.1",
     "moment": "^2.10.6",
-    "sleep": "^3.0.0",
+    "sleep-promise": "^8.0.1",
     "validator": "^4.4.0"
   }
 }
