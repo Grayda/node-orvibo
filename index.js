@@ -10,7 +10,7 @@ var validator = require("validator")
   // jonah takes care of hex -> ASCII and ASCII -> hex stuff
 var hex = require("jonah")
   // Used when setting up a new socket. We need to sleep to let our packet send.
-var sleep = require('sleep');
+var sleep = require('sleep-promise');
 // For parsing timing related stuff
 var moment = require("moment")
 
@@ -477,7 +477,7 @@ Orvibo.prototype.setupDeviceAP = function(type, encryption, ssid, password) {
 // packet. So to send a "p", you'd broadcast a packet of length 230 (so that's 112 is ASCII,
 // plus 76 for some reason, plus 42 (UDP header) and that packet contains nothing but 0x05's)
 // After repeating that for a minute, the device should be (almost) ready to use on the network.
-Orvibo.prototype.setupDevice = function(password) {
+Orvibo.prototype.setupDevice = async function(password) {
   var args = Args([{
     password: Args.STRING | Args.Required
   }, {
@@ -495,10 +495,10 @@ Orvibo.prototype.setupDevice = function(password) {
       port: options.setupport,
       sock: setup
     })
-    sleep.usleep(sleepTime)
+    await sleep(sleepTime)
   }
   debug("Sending of initial header complete")
-  repeat = setInterval(function() {
+  repeat = setInterval(async function() {
 
     for (var i = 0; i < 6; i++) {
       this.sendMessage({
@@ -507,7 +507,7 @@ Orvibo.prototype.setupDevice = function(password) {
         port: options.setupport,
         sock: setup
       })
-      sleep.usleep(sleepTime)
+      await sleep(sleepTime)
     }
 
     debug("Sending of header complete")
@@ -520,14 +520,14 @@ Orvibo.prototype.setupDevice = function(password) {
         port: options.setupport,
         sock: setup
       })
-      sleep.usleep(sleepTime)
+      await sleep(sleepTime)
       this.sendMessage({
         message: _.repeat("05", args.password.charCodeAt(i) + 76),
         address: options.broadcastIP,
         port: options.setupport,
         sock: setup
       })
-      sleep.usleep(sleepTime)
+      await sleep(sleepTime)
     }
 
     debug("Sending of password complete")
@@ -539,7 +539,7 @@ Orvibo.prototype.setupDevice = function(password) {
         port: options.setupport,
         sock: setup
       })
-      sleep.usleep(sleepTime)
+      await sleep(sleepTime)
     }
 
     debug("Sending of footer complete")
@@ -551,7 +551,7 @@ Orvibo.prototype.setupDevice = function(password) {
         port: options.setupport,
         sock: setup
       })
-      sleep.usleep(sleepTime)
+      await sleep(sleepTime)
     }
 
     debug("Sending of checksum complete. Now repeating..")
